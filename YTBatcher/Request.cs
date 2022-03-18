@@ -81,7 +81,7 @@ namespace YTBatcher
                 }
             }
             buffer = new byte[ContentLength];
-            using MemoryStream memory = new((int)5E8);
+            using MemoryStream memory = new MemoryStream((int)5E8);
             using (Stream stream = response.GetResponseStream())
             {
                 while (stream.CanRead)

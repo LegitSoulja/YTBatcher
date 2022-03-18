@@ -6,7 +6,7 @@ namespace YTBatcher
     {
 
         private readonly static ConsoleColor Color = Console.ForegroundColor;
-        private readonly static object _lock = new();
+        private readonly static object _lock = new object();
 
         internal static class Write
         {

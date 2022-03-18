@@ -26,10 +26,10 @@ namespace YTBatcher
         {
             #region [Declarations]
             string downloadpath, playlistid, apiurl;
-            Queue<YTPlaylistItem> items = new();
+            Queue<YTPlaylistItem> items = new Queue<YTPlaylistItem>();
 
             // Headers used to retrieve playlist video ID's
-            Dictionary<string, string> headers = new ()
+            Dictionary<string, string> headers = new Dictionary<string, string>()
             {
                 { "Accept", "application/json" },
                 { "User-Agent", "Mozilla/5.0 (Windows; U; Windows NT 6.0; en-US) AppleWebKit/534.19 (KHTML, like Gecko) Chrome/11.0.667.0 Safari/534.19"}
@@ -92,7 +92,7 @@ namespace YTBatcher
             #endregion
 
             #region [Get Playlist URL]
-            System.Text.RegularExpressions.Regex regex = new(@"list=([A-Za-z0-9_\-+]*)\&?");
+            System.Text.RegularExpressions.Regex regex = new System.Text.RegularExpressions.Regex(@"list=([A-Za-z0-9_\-+]*)\&?");
             System.Text.RegularExpressions.Match match;
 
         getplaylisturl:
@@ -204,7 +204,7 @@ namespace YTBatcher
             return await Task.Run<string>(async () =>
             {
                 string output = string.Empty;
-                Process p = new ()
+                Process p = new Process()
                 {
                     StartInfo = new ProcessStartInfo()
                     {
@@ -235,7 +235,7 @@ namespace YTBatcher
         private static async Task<string> GetYTPublicKey()
         {
             string basejs = Encoding.UTF8.GetString(await Request.Get("https://www.youtube.com/yts/jsbin/player-vflPHG8dr/de_DE/base.js"));
-            System.Text.RegularExpressions.Regex regex = new (@"\$l\(.,.key.,.([A-Za-z0-9-_]*).\);");
+            System.Text.RegularExpressions.Regex regex = new System.Text.RegularExpressions.Regex(@"\$l\(.,.key.,.([A-Za-z0-9-_]*).\);");
             System.Text.RegularExpressions.Match match = regex.Match(basejs, 200000);
             if (!match.Success)
                 return null;
