@@ -1,42 +1,64 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace YTBatcher
 {
     public class YTPlaylist
     {
-        public string kind { get; set; }
-        public string etag { get; set; }
-        public string nextPageToken { get; set; }
-        public YTPlaylistItem[] items { get; set; }
-        public YTPlaylistPageInfo pageInfo { get; set; }
+        [JsonPropertyName("kind")]
+        public string Kind { get; set; }
+
+        [JsonPropertyName("etag")]
+        public string ETag { get; set; }
+
+        [JsonPropertyName("nextPageToken")]
+        public string NextPageToken { get; set; }
+
+        [JsonPropertyName("items")]
+        public YTPlaylistItem[] Items { get; set; }
+
+        [JsonPropertyName("pageInfo")]
+        public YTPlaylistPageInfo PageInfo { get; set; }
     }
 
     public class YTPlaylistItem
     {
-        public string kind { get; set; }
-        public string etag { get; set; }
-        public string id { get; set; }
-        public YTPlaylistItemSnippet snippet { get; set; }
+        [JsonPropertyName("kind")]
+        public string Kind { get; set; }
+
+        [JsonPropertyName("etag")]
+        public string ETag { get; set; }
+
+        [JsonPropertyName("id")]
+        public string Id { get; set; }
+
+        [JsonPropertyName("snippet")]
+        public YTPlaylistItemSnippet Snippet { get; set; }
     }
 
     public class YTPlaylistPageInfo
     {
-        public int totalResults { get; set; }
-        public int resultsPerPage { get; set; }
+        [JsonPropertyName("totalResults")]
+        public int TotalResults { get; set; }
+
+        [JsonPropertyName("resultsPerPage")]
+        public int ResultsPerPage { get; set; }
     }
     public class YTPlaylistItemSnippet
     {
-        public string title { get; set; }
-        public YTPlaylistItemResourceId resourceId { get; set; }
+        [JsonPropertyName("title")]
+        public string Title { get; set; }
+
+        [JsonPropertyName("resourceId")]
+        public YTPlaylistItemResourceId ResourceId { get; set; }
     }
 
     public class YTPlaylistItemResourceId
     {
-        public string kind { get; set; }
-        public string videoId { get; set; }
+        [JsonPropertyName("kind")]
+        public string Kind { get; set; }
+
+        [JsonPropertyName("videoId")]
+        public string VideoId { get; set; }
     }
 }

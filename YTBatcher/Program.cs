@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
-using System.IO;
-using System.Threading.Tasks;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace YTBatcher
 {
@@ -11,186 +12,199 @@ namespace YTBatcher
     {
 
         internal const string YTAPI = "https://www.googleapis.com/youtube/v3/";
-        internal static string YTArguments { get; private set; }
-        internal static string Directory { get; private set; }
-        internal static string YTPath { get; private set; }
-        internal static string YTKEY { get; private set; }
+        private static string Directory, YTPath, YTKEY;
 
-        static void Main(string[] args)
+        static void Main()
         {
             Directory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) + System.IO.Path.DirectorySeparatorChar;
-            YTPath = Directory + "ytdl.exe";
             Start().Wait();
-            Console.WriteLine("Process Complete! Press any key to exit");
+            Logger.SuccessAndTitle("Process Complete! Press any key to exit");
             Console.ReadLine();
         }
 
         private static async Task Start()
         {
+            #region [Declarations]
+            string downloadpath, playlistid, apiurl;
+            Queue<YTPlaylistItem> items = new();
 
-            // Check if youutube-dlp is installed, if not install it
-            if (!File.Exists(YTPath))
-            {
-                Console.WriteLine("Downloading Youtube-DLP");
-                await File.WriteAllBytesAsync(YTPath, await Request.Get("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"));
-            }
-
-            // Get youtube public API key
-            YTKEY = await GetYTPublicKey();
-            if(YTKEY == null)
-            {
-                Console.WriteLine("Failed to obtain youtube public api key!");
-                return;
-            }
-
-            string downloadpath, playlistid;
-
-            Logger.Title("Waiting for user input.");
-            // Get download path to put videos
-            while (true)
-            {
-                Console.Write("Enter path to download videos: ");
-                downloadpath = Console.ReadLine().ToString();
-                if (!System.IO.Directory.Exists(downloadpath))
-                {
-                    Console.WriteLine("Invalid Directory Path!");
-                    continue;
-                }
-                break;
-            }
-
-            System.Text.RegularExpressions.Regex regex = new System.Text.RegularExpressions.Regex(@"list=([A-Za-z0-9_\-+]*)\&?");
-            System.Text.RegularExpressions.Match match;
-
-            getplaylisturl:
-            // Get playlist URL
-            while (true)
-            {
-                Console.Write("Enter Youtube Playlist: ");
-                string playlisturl = Console.ReadLine().ToString();
-                if (Uri.IsWellFormedUriString(playlisturl, UriKind.RelativeOrAbsolute))
-                {
-                    match = regex.Match(playlisturl);
-                    if(match.Success)
-                    {
-                        playlistid = match.Groups[1].Value;
-                        break;
-                    }
-                }
-                Console.WriteLine("Invalid YouTube Playlist URL!");
-            }
-
-            YTPlaylist playlist = null;
-            Queue<YTPlaylistItem> items = new Queue<YTPlaylistItem>();
-            
             // Headers used to retrieve playlist video ID's
-            Dictionary<string, string> headers = new Dictionary<string, string>()
+            Dictionary<string, string> headers = new ()
             {
                 { "Accept", "application/json" },
                 { "User-Agent", "Mozilla/5.0 (Windows; U; Windows NT 6.0; en-US) AppleWebKit/534.19 (KHTML, like Gecko) Chrome/11.0.667.0 Safari/534.19"}
             };
 
-            string apiurl = string.Format("https://youtube.googleapis.com/youtube/v3/playlistItems?part=snippet&part=id&maxResults=50&playlistId={0}&key={1}", playlistid, YTKEY);
-
-            try
-            {
-                // Get first page of videos of playlist
-                playlist = await Request.GetJson<YTPlaylist>(apiurl, headers);
-
-                if(playlist == null)
-                {
-                    Logger.Log("Failed to get playlist information.");
-                    goto getplaylisturl;
-                }
-
-                foreach (YTPlaylistItem item in playlist.items)
-                    items.Enqueue(item);
-
-                Logger.Log(items.Count + " of " + playlist.pageInfo.totalResults);
-
-                // Fetch other videos of pages of the playlist
-                while (!string.IsNullOrEmpty(playlist.nextPageToken))
-                {
-                    string url = apiurl;
-                    if (playlist != null)
-                    {
-                        url += "&pageToken=" + playlist.nextPageToken;
-                        playlist = await Request.GetJson<YTPlaylist>(url, headers);
-                        if(playlist != null)
-                            foreach(YTPlaylistItem item in playlist.items)
-                                items.Enqueue(item);
-                        if (items.Count == playlist.pageInfo.totalResults || playlist.items.Length != playlist.pageInfo.resultsPerPage)
-                            break;
-                        Logger.Log(items.Count + " of " + playlist.pageInfo.totalResults);
-                        continue;
-                    }
-                    break;
-                }
-            }
-            catch(Exception e)
-            {
-                Logger.Log("Failed to get playlist information: " + e.Message);
-                goto getplaylisturl;
-            }
-
+            // Prepared arguments for youtube-dl
             string[] arguments = new string[]
             {
-                "-o \""+downloadpath+Path.DirectorySeparatorChar+"%(title)s-%(id)s.%(ext)s\"",
+                "",
                 //@"-f 'bestvideo+bestaudio[ext=m4a]/bestvideo+bestaudio/best'",
                 "-f b",
                 "--merge-output-format mp4",
                 "--rm-cache-dir",
                 ""
             };
+            #endregion
 
-            // Get number of threads/videos should be downloaded simultaneously. 
-            int downloadthreads = 1;
+            #region [Check / Install / Update Youtube-DLP]
+            // Check if youutube-dlp is installed, if not install it
+            YTPath = string.Format("{0}{1}", Directory, (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "yt-dlp.exe" : "yt-dlp"));
+            if (!File.Exists(YTPath))
+            {
+                Logger.SuccessAndTitle("Downloading Youtube-DLP");
+                await File.WriteAllBytesAsync(YTPath, await Request.Get((RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" : "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp")));
+            }
+            else
+            {
+                Logger.Acknowledge("Updating Youtube-DLP");
+                await Execute(YTPath, new string[] { "-U" });
+            }
+            #endregion
+
+            #region [Get Youtube Public API key]
+            Logger.Acknowledge("Getting Youtube Public API Key");
+            YTKEY = await GetYTPublicKey();
+            if (YTKEY == null)
+            {
+                Logger.Error("Failed to obtain youtube public api key!");
+                return;
+            }
+            await Task.Delay(1000);
+            Console.Clear();
+            #endregion
+
+            #region [Get File Path To Download Videos]
+            Logger.Title("Waiting for user input.");
+            // Get download path to put videos
             while (true)
             {
-                Console.Write("How many download threads?: ");
-                if(!int.TryParse(Console.ReadLine().ToString(), out downloadthreads))
+                Logger.Write.Acknowledge("Enter path to download videos: ");
+                downloadpath = Console.ReadLine().ToString();
+                if (!System.IO.Directory.Exists(downloadpath))
                 {
-                    Console.WriteLine("Invalid number (integer) provided!");
+                    Logger.Warn("Invalid Directory Path!");
+                    continue;
+                }
+                break;
+            }
+            arguments[0] = "-o \"" + downloadpath + Path.DirectorySeparatorChar + "%(title)s-%(id)s.%(ext)s\"";
+            #endregion
+
+            #region [Get Playlist URL]
+            System.Text.RegularExpressions.Regex regex = new(@"list=([A-Za-z0-9_\-+]*)\&?");
+            System.Text.RegularExpressions.Match match;
+
+        getplaylisturl:
+            // Get playlist URL
+            while (true)
+            {
+                Logger.Write.Acknowledge("Enter Youtube Playlist: ");
+                string playlisturl = Console.ReadLine().ToString();
+                if (Uri.IsWellFormedUriString(playlisturl, UriKind.RelativeOrAbsolute))
+                {
+                    match = regex.Match(playlisturl);
+                    if (match.Success)
+                    {
+                        playlistid = match.Groups[1].Value;
+                        break;
+                    }
+                }
+                Logger.Warn("Invalid YouTube Playlist URL!");
+            }
+            apiurl = string.Format("https://youtube.googleapis.com/youtube/v3/playlistItems?part=snippet&part=id&maxResults=50&playlistId={0}&key={1}", playlistid, YTKEY);
+            #endregion
+
+            #region [Get Videos In Playlist]
+            try
+            {
+                // Get first page of videos of playlist
+                YTPlaylist playlist = await Request.GetJson<YTPlaylist>(apiurl, headers);
+
+                if (playlist == null)
+                {
+                    Logger.Error("Failed to get playlist information.");
+                    goto getplaylisturl;
+                }
+
+                foreach (YTPlaylistItem item in playlist.Items)
+                    items.Enqueue(item);
+
+                Logger.LogAndTitle("{0} of {1} videos obtained frm playlist", items.Count, playlist.PageInfo.TotalResults);
+
+                // Fetch other videos of pages of the playlist
+                while (!string.IsNullOrEmpty(playlist.NextPageToken))
+                {
+                    string url = apiurl;
+                    if (playlist != null)
+                    {
+                        url += "&pageToken=" + playlist.NextPageToken;
+                        playlist = await Request.GetJson<YTPlaylist>(url, headers);
+                        if (playlist != null)
+                            foreach (YTPlaylistItem item in playlist.Items)
+                                items.Enqueue(item);
+                        if (items.Count == playlist.PageInfo.TotalResults || playlist.Items.Length != playlist.PageInfo.ResultsPerPage)
+                            break;
+                        Logger.LogAndTitle("{0} of {1} videos obtained frm playlist", items.Count, playlist.PageInfo.TotalResults);
+                        continue;
+                    }
+                    break;
+                }
+            }
+            catch (Exception e)
+            {
+                Logger.Error("Failed to get playlist information: " + e.Message);
+                goto getplaylisturl;
+            }
+            #endregion
+
+            #region [Get Number Of Thread/Videos To Download Simultaneously]
+            int downloadthreads;
+            while (true)
+            {
+                Logger.Write.Acknowledge("How many download threads?: ");
+                if (!int.TryParse(Console.ReadLine().ToString(), out downloadthreads))
+                {
+                    Logger.Warn("Invalid number (integer) provided!");
                     continue;
                 }
                 break;
             }
             int videos = items.Count;
             Task<string>[] tasks = new Task<string>[downloadthreads];
+            #endregion
 
-            YTPlaylistItem testpeek;
+            #region [Download Videos]
             // Download Commences! 
-            while (items.TryPeek(out testpeek))
+            while (items.Count > 0)
             {
-                for(int i = 0; i < downloadthreads; i++)
+                for (int i = 0; i < downloadthreads; i++)
                 {
-                    if(tasks[i] == null || tasks[i].IsCompleted)
+                    if (tasks[i] == null || tasks[i].IsCompleted)
                     {
-                        YTPlaylistItem item;
-                        if (!items.TryDequeue(out item))
+                        if (!items.TryDequeue(out YTPlaylistItem item))
                             break;
                         string[] s = (string[])arguments.Clone();
-                        s[s.Length - 1] = item.snippet.resourceId.videoId;
-                        Console.WriteLine("Downloading: {0}: [{1}]", item.snippet.resourceId.videoId, item.snippet.title);
+                        s[^1] = item.Snippet.ResourceId.VideoId;
+                        Console.WriteLine("Downloading: {0}: [{1}]", item.Snippet.ResourceId.VideoId, item.Snippet.Title);
                         tasks[i] = Execute(YTPath, s, false, false);
                     }
                 }
-                Logger.Title("{0}/{1} in process or completed.", videos-items.Count, videos);
+                Logger.Title("{0}/{1} in process or completed.", videos - items.Count, videos);
                 Task.WaitAny(tasks);
             }
-            
+
             // after all tasks are dequed, ensure all tasks are complete.
             Task.WaitAll(tasks);
-
+            #endregion
         }
 
         public static async Task<string> Execute(string filePath, string[] arguments, bool useShellExecute = false, bool createNoWindow = true)
         {
-
-            return await Task.Run<string>(async() =>
+            return await Task.Run<string>(async () =>
             {
                 string output = string.Empty;
-                Process p = new Process()
+                Process p = new ()
                 {
                     StartInfo = new ProcessStartInfo()
                     {
@@ -221,12 +235,10 @@ namespace YTBatcher
         private static async Task<string> GetYTPublicKey()
         {
             string basejs = Encoding.UTF8.GetString(await Request.Get("https://www.youtube.com/yts/jsbin/player-vflPHG8dr/de_DE/base.js"));
-            System.Text.RegularExpressions.Regex regex = new System.Text.RegularExpressions.Regex(@"\$l\(.,.key.,.([A-Za-z0-9-_]*).\);");
+            System.Text.RegularExpressions.Regex regex = new (@"\$l\(.,.key.,.([A-Za-z0-9-_]*).\);");
             System.Text.RegularExpressions.Match match = regex.Match(basejs, 200000);
             if (!match.Success)
                 return null;
-            basejs = null;
-            regex = null;
             return match.Groups[1].Value;
         }
 
