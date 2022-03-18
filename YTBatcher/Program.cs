@@ -59,7 +59,7 @@ namespace YTBatcher
                 break;
             }
 
-            System.Text.RegularExpressions.Regex regex = new System.Text.RegularExpressions.Regex(@"list=([A-Za-z0-9_+]*)\&?");
+            System.Text.RegularExpressions.Regex regex = new System.Text.RegularExpressions.Regex(@"list=([A-Za-z0-9_\-+]*)\&?");
             System.Text.RegularExpressions.Match match;
 
             getplaylisturl:
@@ -89,45 +89,48 @@ namespace YTBatcher
                 { "Accept", "application/json" },
                 { "User-Agent", "Mozilla/5.0 (Windows; U; Windows NT 6.0; en-US) AppleWebKit/534.19 (KHTML, like Gecko) Chrome/11.0.667.0 Safari/534.19"}
             };
-            Console.WriteLine(playlistid);
+
             string apiurl = string.Format("https://youtube.googleapis.com/youtube/v3/playlistItems?part=snippet&part=id&maxResults=50&playlistId={0}&key={1}", playlistid, YTKEY);
-            
-            // Fetch playlist video ID's per page, appending them to Queue.
-            while (true)
+
+            try
             {
-                string url = apiurl;
-                if(playlist != null)
+                // Get first page of videos of playlist
+                playlist = await Request.GetJson<YTPlaylist>(apiurl, headers);
+
+                if(playlist == null)
                 {
-                    if(items.Count == playlist.pageInfo.totalResults)
-                    {
-                        break;
-                    }
-                    if (string.IsNullOrEmpty(playlist.nextPageToken))
-                    {
-                        break;
-                    }else
-                    {
-                        url += "&pageToken=" + playlist.nextPageToken;
-                    }
-                }
-                try
-                {
-                    playlist = await Request.GetJson<YTPlaylist>(url, headers);
-                }
-                catch (Exception e)
-                {
-                    Logger.Log("Failed to get playlist information: " + e.Message);
+                    Logger.Log("Failed to get playlist information.");
                     goto getplaylisturl;
                 }
-                foreach(YTPlaylistItem item in playlist.items)
-                {
+
+                foreach (YTPlaylistItem item in playlist.items)
                     items.Enqueue(item);
-                }
+
                 Logger.Log(items.Count + " of " + playlist.pageInfo.totalResults);
-                if(playlist.items.Length != playlist.pageInfo.resultsPerPage)
+
+                // Fetch other videos of pages of the playlist
+                while (!string.IsNullOrEmpty(playlist.nextPageToken))
                 {
+                    string url = apiurl;
+                    if (playlist != null)
+                    {
+                        url += "&pageToken=" + playlist.nextPageToken;
+                        playlist = await Request.GetJson<YTPlaylist>(url, headers);
+                        if(playlist != null)
+                            foreach(YTPlaylistItem item in playlist.items)
+                                items.Enqueue(item);
+                        if (items.Count == playlist.pageInfo.totalResults || playlist.items.Length != playlist.pageInfo.resultsPerPage)
+                            break;
+                        Logger.Log(items.Count + " of " + playlist.pageInfo.totalResults);
+                        continue;
+                    }
                     break;
                 }
+            }
+            catch(Exception e)
+            {
+                Logger.Log("Failed to get playlist information: " + e.Message);
+                goto getplaylisturl;
             }
 
             string[] arguments = new string[]
